@@ -1,12 +1,24 @@
 pragma solidity >=0.4.25;
 import "./AddressUtils.sol";
 
-//Last updated by Zol, 2020.02.28
+//Last updated by Zol, 2020.02.29
 contract ERC20Interface {
     function allowance(address _from, address _to) public view returns(uint);
     function transferFrom(address _from, address _to, uint _sum) public;
     function transfer(address _to, uint _sum) public;
     function balanceOf(address _owner) public view returns(uint);
+    function mint(uint _amount) public; 
+}
+
+interface MXOptions {
+    function mint(uint _amount) external; 
+    function setOption(uint _amount, uint _lastTo) external;
+}
+
+contract TestUserInterface {
+    function getUserAddressCount(address _addr) public view returns(uint);
+    function getUserByAddress(address _addr) public view returns(uint);
+    function getUsersAddress(uint _usersId, uint _counter) public view returns(address);
 }
 
 contract MXHedera {
@@ -14,7 +26,7 @@ contract MXHedera {
     event Transfer(address indexed _from, address indexed _to, uint _sum);
     event OuterOrderCreated(address indexed _buyer, uint indexed _orderId, uint _amount);
     event OrderPaid(address indexed _buyer, uint indexed _orderId);
-    event TokenBought(address indexed _buyer, uint indexed _promoter, uint _sum);
+    event TokenBought(address indexed _buyer, uint _sum);
     event TokenBoughtFromSeller(address indexed _buyer, address _seller, uint _amount, uint indexed _offerId);
     event SetToSale(address indexed _seller, uint indexed _offerId, uint _amount, uint _unitPrice);
     event ApproveTransfer(address indexed _seller, address indexed _buyer, uint _amount);
@@ -24,6 +36,8 @@ contract MXHedera {
     uint public initSupply;
     address public spotMarketAddress;
     address public depositAddress;
+    address public futuresContractAddress;
+    address public testUserAddress;
     uint supply;
     uint decimals;
     mapping(address => uint) public balanceOf;
@@ -86,17 +100,21 @@ contract MXHedera {
     ToTransfer[] toTransfers;
     uint public toTransferCounter = 0;
     
-    constructor (address _operator, uint _initSupply, string memory _name, string memory _symbol, address _serverAddress, uint _initPriceUSD, uint _initPriceHbar) public {
+    constructor (address _operator, uint _initSupply, string memory _name, string memory _symbol, address _serverAddress, uint _initPriceUSD, 
+        uint _initPriceHbar, address _spotMarket, address _deposit, address _futures, address _testUser) public {
         operatorOfContract = _operator;        
         balanceOf[this] = _initSupply;
         initSupply = _initSupply;
         supply = initSupply;
-        name = _name;
         symbol = _symbol;
+        name = _name;
+        decimals = 0;
         serverAddressArrayLength = serverAddress.push(_serverAddress);
         isOurServer[_serverAddress] = true;
-        //spotMarketAddress = _spotMarket;
-        //depositAddress = _deposit;
+        spotMarketAddress = _spotMarket;
+        depositAddress = _deposit;
+        futuresContractAddress = _futures;
+        testUserAddress = _testUser;
         priceUSD = _initPriceUSD;
         priceHbar = _initPriceHbar; //Input in tinybar
         HbarUSDprice = priceUSD * 100000000 / priceHbar;
@@ -111,35 +129,27 @@ contract MXHedera {
     }
     
     function mintByTx(uint _txAmount) private {
-        uint supplyIncrease = uint(_txAmount * 2 / 100);
-        supply += supplyIncrease;
-        balanceOf[this] += supplyIncrease;
         //Don't add to contract's balance, but half of them to deposit, half of them to spot market
-        //uint supplyIncreaseHalf = uint(_txAmount / 100);
-        //balanceOf[address(spotMarketAddress)] += supplyIncrease;
-        //balanceOf[address(depositAddress)] += supplyIncrease;
-        //uint supplyIncrease = supplyIncreaseHalf * 2;
-        //supply += supplyIncrease;
+        uint supplyIncreaseHalf = uint(_txAmount / 100);
+        balanceOf[address(spotMarketAddress)] += supplyIncreaseHalf;
+        balanceOf[address(depositAddress)] += supplyIncreaseHalf;
+        uint supplyIncrease = supplyIncreaseHalf * 2;
+        supply += supplyIncrease;
     }
     
     function mintAtUpperBound(uint _txAmount) private {
-        /*
-        uint upperBound = dailyBasePrice * 102 / 100;
-        require(priceUSD >= upperBound);
-        */
         supply += _txAmount;
         balanceOf[this] += _txAmount;
     }
-    /*
-    address public futuresContractAddress; Should define at constructor
-    ERC20Interface futureCon = ERC20Interface(futuresContractAddress); This should have probably custom interface
-    function issueOptionByCredit(uint _loanAmount, uint _interestRate) private {
+    
+    MXOptions futureCon = MXOptions(futuresContractAddress); //This should have probably custom interface
+    function issueOptionByCredit(uint _interestRate, uint _lastTo) private {
         if(_interestRate > 2) {
-            uint optionIncrease = uint((_loanAmount * (_interestRate - 2)) / 100);
-            futureCon.supply += optionIncrease; ??? use function like futureCon.increase(optionIncrease)
-            futureCon.optionBalance[address(futuresContractAddress)] += optionIncrease; ???
+            uint optionIncrease = _interestRate;
+            futureCon.mint(optionIncrease); //??? use function like futureCon.increase(optionIncrease) //???
+            futureCon.setOption(optionIncrease, _lastTo);
         }
-    } */
+    }
 
     //MXoptions and MXfutures can be changed to MX from futuresAddress's balance
     //address public futuresAddress; should define in constructor
@@ -147,8 +157,8 @@ contract MXHedera {
         if(_interestRate > 2) {
             uint supplyIncrease = uint((_loanAmount * (_interestRate - 2)) / 100);
             supply += supplyIncrease;
-            balanceOf[this] += supplyIncrease;  
-            //balanceOf[address(futuresAddress)] += supplyIncrease;
+            //balanceOf[this] += supplyIncrease;  
+            balanceOf[address(futuresContractAddress)] += supplyIncrease;
         }
     }
     
@@ -201,12 +211,7 @@ contract MXHedera {
         _transfer(msg.sender, _to, _sum);
         mintByRedeem(_sum, _interestRate); 
     }
-    /*
-    function transferLoan(address _to, uint _sum, uint _interestRate) public {
-        _transfer(msg.sender, _to, _sum);
-        mintByCredit(_sum, _interestRate);
-    }
-    */
+
     //For using other currencies like BTC, fiat...
     function createOuterOrder(uint _amount) public {
         require(_amount > 0);
@@ -244,11 +249,11 @@ contract MXHedera {
     
     //----------
     
-    function buyToken(uint _sum, uint _promoter) public payable {
+    function buyToken(uint _sum) public payable {
         uint price = _sum * priceHbar;
         require(msg.value == price);
         _transfer(address(this), msg.sender, _sum);
-        emit TokenBought(msg.sender, _promoter, _sum);
+        emit TokenBought(msg.sender, _sum);
     }
     
     function getTokenBalance(address _owner) public view returns(uint) {
@@ -386,16 +391,14 @@ contract MXHedera {
         _transfer(address(this), _addr, _amount);
     }
     
-    /*
-    TestUserInterface tui = TestUserInterface(...); need TestUserInterface
+    TestUserInterface tui = TestUserInterface(testUserAddress); 
     function approveToAllAddress(uint _sum, address _spender) public {
-        uint addressCount = tui.userAddressCount(msg.sender); should create this function
-        uint user = tui.userByAddress(msg.sender);
+        uint addressCount = tui.getUserAddressCount(msg.sender); //should create this function
+        uint user = tui.getUserByAddress(msg.sender);
         for(uint i = 0; i < addressCount; i++) {
-            address currentAddress = tui.getUserAddress(user, i);
+            address currentAddress = tui.getUsersAddress(user, i);
             approvedTransfers[currentAddress][_spender] += _sum;
             emit ApproveTransfer(currentAddress, _spender, _sum);
         }
     }
-    */
 }
