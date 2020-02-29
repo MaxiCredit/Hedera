@@ -7,7 +7,6 @@ contract ERC20Interface {
     function transferFrom(address _from, address _to, uint _sum) public;
     function transfer(address _to, uint _sum) public;
     function balanceOf(address _owner) public view returns(uint);
-    function mint(uint _amount) public; 
 }
 
 interface MXOptions {
