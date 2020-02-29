@@ -27,7 +27,8 @@ contract MXHederaDEX {
     address public owner;
     mapping(address => mapping(uint => uint)) public ordersByAddress;
     mapping(address => uint) public orderNumberByAddress;
-    ERC20Interface mxi = ERC20Interface(0x...);
+    address public MXAddress;
+    ERC20Interface mxi = ERC20Interface(MXAddress);
 
     struct Order {
         OfferType orderType;
@@ -48,9 +49,19 @@ contract MXHederaDEX {
         owner = msg.sender;
     }
     
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
+    }
+    
     modifier onlyOwnerOf(uint _id) {
         require(orders[_id].orderOwner == msg.sender);
         _;
+    }
+    
+    function setMXAddress(address _addr) public onlyOwner {
+        require(_addr != address(0));
+        MXAddress = _addr;
     }
     
     function setOrderHbarBid(uint _amount, uint _price, uint _lastTo) public payable {
