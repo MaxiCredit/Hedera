@@ -1,7 +1,7 @@
 pragma solidity >=0.4.25;
 import "./AddressUtils.sol";
 
-//Last updated by Zol, 2020.02.29
+//Last updated by Zol, 2020.01.13
 contract ERC20Interface {
     function allowance(address _from, address _to) public view returns(uint);
     function transferFrom(address _from, address _to, uint _sum) public;
@@ -35,7 +35,7 @@ contract MXHedera {
     uint public initSupply;
     address public spotMarketAddress;
     address public depositAddress;
-    address public futuresContractAddress;
+    address public futuresContractAddress; //Rename optionContarctAddress
     address public testUserAddress;
     uint supply;
     uint decimals;
@@ -57,7 +57,7 @@ contract MXHedera {
         uint price;
         uint amount;
     }
-    BuyBackOffer[] buyBackOffers;
+    BuyBackOffer[] public buyBackOffers;
     uint public buyBackOfferCounter = 0;
     uint public hbarsToBuyBack = 0;
     
@@ -68,9 +68,9 @@ contract MXHedera {
     //address public contractOwner;
     address public operatorOfContract;
     
-    address[] serverAddress;
-    uint serverAddressArrayLength;
-    mapping(address => bool) isOurServer;
+    address[] public serverAddress;
+    uint public serverAddressArrayLength;
+    mapping(address => bool) public isOurServer;
     
     uint public priceUSD; //0.01 USD cent
     uint public priceHbar; 
@@ -81,7 +81,7 @@ contract MXHedera {
     uint public dailyLowerBound;
 
     modifier onlyServer() {
-        require(isOurServer[msg.sender]);
+        require(isOurServer[msg.sender] == true);
         _;
     }
     
@@ -99,7 +99,7 @@ contract MXHedera {
     ToTransfer[] toTransfers;
     uint public toTransferCounter = 0;
     
-    constructor (address _operator, uint _initSupply, string memory _name, string memory _symbol, address _serverAddress, uint _initPriceUSD, 
+    constructor (address _operator, uint _initSupply, string memory _name, string memory _symbol, uint _initPriceUSD, 
         uint _initPriceHbar, address _spotMarket, address _deposit, address _futures, address _testUser) public {
         operatorOfContract = _operator;        
         balanceOf[this] = _initSupply;
@@ -108,8 +108,8 @@ contract MXHedera {
         symbol = _symbol;
         name = _name;
         decimals = 0;
-        serverAddressArrayLength = serverAddress.push(_serverAddress);
-        isOurServer[_serverAddress] = true;
+        serverAddressArrayLength = serverAddress.push(_operator);
+        isOurServer[_operator] = true;
         spotMarketAddress = _spotMarket;
         depositAddress = _deposit;
         futuresContractAddress = _futures;
@@ -139,13 +139,14 @@ contract MXHedera {
     function mintAtUpperBound(uint _txAmount) private {
         supply += _txAmount;
         balanceOf[this] += _txAmount;
+        setToSale(_txAmount, dailyUpperBound);
     }
     
-    MXOptions futureCon = MXOptions(futuresContractAddress); //This should have probably custom interface
+    MXOptions futureCon = MXOptions(futuresContractAddress); //Rename optionCon
     function issueOptionByCredit(uint _interestRate, uint _lastTo) private {
         if(_interestRate > 2) {
             uint optionIncrease = _interestRate;
-            futureCon.mint(optionIncrease); //??? use function like futureCon.increase(optionIncrease) //???
+            futureCon.mint(optionIncrease); 
             futureCon.setOption(optionIncrease, _lastTo);
         }
     }
@@ -177,11 +178,11 @@ contract MXHedera {
         isOurServer[_serverAddress] = true;
     }
     
-    function getServerAddressLength() public view operator returns(uint) {
+    function getServerAddressLength() public view returns(uint) {
         return serverAddressArrayLength;
     }
     
-    function getServerAddress(uint _num) public view operator returns(address) {
+    function getServerAddress(uint _num) public view returns(address) {
         return serverAddress[_num];
     }
     
@@ -336,7 +337,7 @@ contract MXHedera {
     }
     
     //_priceHbar in tinybar, _priceUSD and _HbarUSDprice in 0.01 USD cent
-    function setPrice(uint _priceUSD, uint _priceHbar, uint _HbarUSDprice) public onlyServer() {
+    function setPrice(uint _priceUSD, uint _priceHbar, uint _HbarUSDprice) public onlyServer {
        priceUSD = _priceUSD;
        priceHbar = _priceHbar; 
        HbarUSDprice = _HbarUSDprice;
@@ -359,13 +360,20 @@ contract MXHedera {
     }
     
     //_priceHbar in tinybar, _priceUSD and _HbarUSDprice in 0.01 USD cent
-    function checkPrice(uint _priceUSD, uint _priceHbar, uint _HbarUSDprice, uint _txAmount) public onlyServer() {
+    function checkPrice(uint _priceUSD, uint _priceHbar, uint _HbarUSDprice, uint _txAmount) public onlyServer {
         uint USDpriceFromHbar = _priceHbar * _HbarUSDprice / 100000000;
+        priceUSD = _priceUSD;
+        priceHbar = _priceHbar;
+        HbarUSDprice = _HbarUSDprice;
         if(_priceUSD >= dailyUpperBound || USDpriceFromHbar >= dailyUpperBound) {
             mintAtUpperBound(_txAmount);
+            priceUSD = dailyUpperBound;
+            priceHbar = dailyUpperBound * 100000000 / HbarUSDprice;
         }
         if(_priceUSD <= dailyLowerBound || USDpriceFromHbar <= dailyLowerBound) {
             buyBackOrder(_txAmount);
+            priceUSD = dailyLowerBound;
+            priceHbar = dailyLowerBound * 100000000 / HbarUSDprice;
         }
     }
     
@@ -374,16 +382,22 @@ contract MXHedera {
             if(address(this).balance > hbarsToBuyBack) {
                 buyBackOffers.push(BuyBackOffer(dailyLowerBound, _txAmount));
                 buyBackOfferCounter++;
-                hbarsToBuyBack += (_txAmount * dailyLowerBound * HbarUSDprice);
+                hbarsToBuyBack += _txAmount * dailyLowerBound * 100000000 / HbarUSDprice;
             }
         }
     }
     
-    function buyBack(uint _txAmount, uint _buyBackOfferId) public payable {
+    function buyBack(uint _txAmount, uint _buyBackOfferId) public {
         require(_txAmount <= buyBackOffers[_buyBackOfferId].amount);
-        require(msg.value == buyBackOffers[_buyBackOfferId].price * _txAmount * HbarUSDprice);
+        //require(allowance(msg.sender, address(this)) >= _txAmount);
+        //transferFrom(msg.sender, address(this), _txAmount);
+        uint hbarsToSend = _txAmount * buyBackOffers[_buyBackOfferId].price * 100000000 / HbarUSDprice;
+        require(hbarsToSend <= hbarsToBuyBack);
+        _transfer(msg.sender, address(this), _txAmount);
         buyBackOffers[_buyBackOfferId].amount -= _txAmount;
-        hbarsToBuyBack -= _txAmount * buyBackOffers[_buyBackOfferId].price * HbarUSDprice;
+        hbarsToBuyBack -= hbarsToSend;
+        address to = msg.sender;
+        to.transfer(hbarsToSend);
     }
     
     function transferFromContract(address _addr, uint _amount) public operator() {
