@@ -11,8 +11,8 @@ contract ERC20Interface {
 
 contract MXHederaDEX {
     
-    event SetOrderHbarHBid();
-    event SetOrderHbarAsk();
+    event SetOrderHbarBid(uint indexed _orderId, uint _amount, uint _price, uint _lastTo);
+    event SetOrderHbarAsk(uint indexed _orderId, uint _amount, uint _price, uint _lastTo);
     event SetOrderERC20(OfferType indexed _orderType, uint indexed _orderId, uint _amount, uint _price, uint _lastTo, address _currencyAddress);
     event DeleteOrder(uint indexed _orderId);
     event AcceptHbarBid(uint indexed _orderId, uint _amount);
@@ -71,7 +71,7 @@ contract MXHederaDEX {
         ordersByAddress[msg.sender][orderNumberByAddress[msg.sender]] = orderId;
         orderNumberByAddress[msg.sender] ++;
         orderCounter++;
-        emit SetOrderHbarHBid();
+        emit SetOrderHbarBid(orderId, _amount, _price, _lastTo);
     }
 
     function setOrderHbarAsk(uint _amount, uint _price, uint _lastTo) public {
@@ -80,7 +80,7 @@ contract MXHederaDEX {
         ordersByAddress[msg.sender][orderNumberByAddress[msg.sender]] = orderId;
         orderNumberByAddress[msg.sender] ++;
         orderCounter++;
-        emit SetOrderHbarAsk();
+        emit SetOrderHbarAsk(orderId, _amount, _price, _lastTo);
     }
     
     function setOrderERC20(OfferType _orderType, uint _amount, uint _price, uint _lastTo, address _currencyAddress) public {
@@ -99,13 +99,15 @@ contract MXHederaDEX {
     
     function deleteOrder(uint _orderId) public onlyOwnerOf(_orderId) {
         address sendBack = orders[_orderId].orderOwner;
-        sendBack.transfer(orders[_orderId].HbarBalance);
+        if(orders[_orderId].HbarBalance > 0) {
+            sendBack.transfer(orders[_orderId].HbarBalance);
+            orders[_orderId].HbarBalance = 0;
+        }
         orders[_orderId].orderAmount = 0;
         orders[_orderId].orderPrice = 0;
         orders[_orderId].orderLastTo = 0;
         orders[_orderId].orderOwner = address(0);
         orders[_orderId].orderCurrencyAddress = address(0);
-        orders[_orderId].HbarBalance = 0;
         emit DeleteOrder(_orderId);
     }
     
@@ -118,9 +120,8 @@ contract MXHederaDEX {
         msg.sender.transfer(bidHbarPrice);
         mxi.transferFrom(msg.sender, orders[_orderId].orderOwner, _amount);
         emit AcceptHbarBid(_orderId, _amount);
-         //Event
-         orders[_orderId].orderAmount -= _amount;
-         orders[_orderId].HbarBalance -= bidHbarPrice;
+        orders[_orderId].orderAmount -= _amount;
+        orders[_orderId].HbarBalance -= bidHbarPrice;
     }
     
     function acceptAskHbar(uint _orderId, uint _amount) public payable {
@@ -133,7 +134,6 @@ contract MXHederaDEX {
         ordersOwner.transfer(askHbarPrice);
         mxi.transferFrom(orders[_orderId].orderOwner, msg.sender, _amount);
         emit AcceptHbarAsk(_orderId, _amount);
-        //Event
         orders[_orderId].orderAmount -= _amount;
     }
     
@@ -146,7 +146,7 @@ contract MXHederaDEX {
         address currencyAddress = orders[_orderId].orderCurrencyAddress;
         ERC20Interface(currencyAddress).transferFrom(orders[_orderId].orderOwner, msg.sender, bidERC20Price);
         mxi.transferFrom(msg.sender, orders[_orderId].orderOwner, _amount);
-        //Event
+        emit AcceptERC20Bid();
         orders[_orderId].orderAmount -= _amount;
     }
     
@@ -159,7 +159,7 @@ contract MXHederaDEX {
         uint askERC20Price = orders[_orderId].orderPrice * _amount;
         ERC20Interface(currencyAddress).transferFrom(msg.sender, orders[_orderId].orderOwner, askERC20Price);
         mxi.transferFrom(orders[_orderId].orderOwner, msg.sender, _amount);
-        //Event 
+        emit AcceptERC20Ask();
         orders[_orderId].orderAmount -= _amount;
     }
 }
