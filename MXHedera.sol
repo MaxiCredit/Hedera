@@ -1,7 +1,7 @@
 pragma solidity >=0.4.25;
 import "./AddressUtils.sol";
 
-//Last updated by Zol, 2020.01.13
+//Last updated by Zol, 2020.03.03
 contract ERC20Interface {
     function allowance(address _from, address _to) public view returns(uint);
     function transferFrom(address _from, address _to, uint _sum) public;
@@ -9,11 +9,12 @@ contract ERC20Interface {
     function balanceOf(address _owner) public view returns(uint);
 }
 
+/*
 interface MXOptions {
     function mint(uint _amount) external; 
     function setOption(uint _amount, uint _lastTo) external;
 }
-
+*/
 contract TestUserInterface {
     function getUserAddressCount(address _addr) public view returns(uint);
     function getUserByAddress(address _addr) public view returns(uint);
@@ -142,6 +143,7 @@ contract MXHedera {
         setToSale(_txAmount, dailyUpperBound);
     }
     
+    /*
     MXOptions futureCon = MXOptions(futuresContractAddress); //Rename optionCon
     function issueOptionByCredit(uint _interestRate, uint _lastTo) private {
         if(_interestRate > 2) {
@@ -150,7 +152,7 @@ contract MXHedera {
             futureCon.setOption(optionIncrease, _lastTo);
         }
     }
-
+    */
     //MXoptions and MXfutures can be changed to MX from futuresAddress's balance
     //address public futuresAddress; should define in constructor
     function mintByRedeem(uint _loanAmount, uint _interestRate) private {
