@@ -176,6 +176,12 @@ contract TestUsers {
         return(usersAddresses[_usersId][_counter]);
     }
     
+    function getUserAddressCount(address _addr) public view returns(uint) {
+        require(checkUsersAddress(_addr));
+        uint id = getUserByAddress(_addr);
+        return(users[id].addressesCounter);
+    }
+    
     function getUserByAddress(address _addr) public view returns(uint) {
         require(checkUsersAddress(_addr));
         //if fails error msg
