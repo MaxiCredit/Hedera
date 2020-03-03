@@ -1,6 +1,7 @@
 pragma solidity >=0.4.25;
 
 import "./ERC20.sol";
+import "./TestCredit.sol";
 
 contract MXInterface {
     function allowance(address _from, address _to) public view returns(uint);
@@ -12,6 +13,7 @@ contract MXInterface {
 
 contract MXOptions is ERC20("MX Option", "MX Opt", 0) {
     
+    address public CreditCreatorAddress;
     address public MXAddress;
     MXInterface mxi = MXInterface(MXAddress);
     address public owner;
@@ -21,8 +23,18 @@ contract MXOptions is ERC20("MX Option", "MX Opt", 0) {
         _;
     }
     
+    modifier onlyCreditCreator {
+        require(msg.sender == CreditCreatorAddress);
+        _;
+    }
+    
     constructor() public {
         owner = msg.sender;
+    }
+    
+    function setCreditCreatorAddress(address _addr) public onlyOwner {
+        require(_addr != address(0));
+        CreditCreatorAddress = _addr;
     }
     
     function setMXAddress(address _addr) public onlyOwner {
@@ -38,7 +50,7 @@ contract MXOptions is ERC20("MX Option", "MX Opt", 0) {
     }
     Option[] public options;
     
-    function setOptions(address _addr, uint _amount, uint _exp, uint _price) public {
+    function setOptions(address _addr, uint _amount, uint _exp, uint _price) public onlyCreditCreator {
         options.push(Option(_addr, _amount, _exp, _price));
         mint(_addr, _amount);
     }
