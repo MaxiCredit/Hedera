@@ -47,7 +47,7 @@ contract TestUsers {
     constructor () public {
         owner = msg.sender;
         operators.push(msg.sender);
-        isOp[msg.sender] == true;
+        isOp[msg.sender] = true;
         userCounter = 0;
         //     servers = new OnlyServer();
 //        serversContract = address(servers);
@@ -124,7 +124,7 @@ contract TestUsers {
             //isSpec[userCounter][operators[0] = true change to random operators, when there are more ops
             isSpec[userCounter][testCreditAddress] = true; //??
             isSpec[userCounter][msg.sender] = true;
-            users.push(User(_firstName, userCounter, _birthDate, getAge(_birthDate), _mothersFirstName, _idDocumentNumber, _personalID, _country, _city, _residentalAddress, _emailAddress, _phoneNumber, 100, 1, 0));
+            users.push(User(_firstName, userCounter, _birthDate, getAge(_birthDate), _mothersFirstName, _idDocumentNumber, _personalID, _country, _city, _residentalAddress, _emailAddress, _phoneNumber, 0, 1, 0));
             emit NewUserAdded(_firstName, userCounter, msg.sender, _personalID);
             userCounter ++;
     }
@@ -192,9 +192,10 @@ contract TestUsers {
         return(isPending[_usersId]);
     }
     
-    function setChecked(uint _usersId) public {
+    function setChecked(uint _usersId) public onlyOps {
         require(isPending[_usersId]);
         isPending[_usersId] = false;
+        users[_usersId].creditScore = 100;
     }
     
     function getAge(uint _birthDate) private view returns(uint) {
@@ -203,8 +204,8 @@ contract TestUsers {
         return(age);
     }
     
-    function increaseCreditScore(uint _borrowerId, uint _interestRate, uint _creditId) public onlyCreditContract(_creditId) {
-        uint plus = calculateScoreIncrease(_interestRate);
+    function increaseCreditScore(uint _borrowerId, uint _interest, uint _interestRate, uint _creditId) public onlyCreditContract(_creditId) {
+        uint plus = calculateScoreIncrease(_interest, _interestRate);
         users[_borrowerId].creditScore += plus; 
     }
     
@@ -221,8 +222,9 @@ contract TestUsers {
         */
     }
     
-    function calculateScoreIncrease(uint _interest) public pure returns(uint) {
-        uint creditScoreChange;
+    function calculateScoreIncrease(uint _interest, uint _interestRate) public pure returns(uint) {
+        uint creditScoreChange = lg(_interest) + lg(_interestRate) - 8;
+        /*
         if(_interest <= 20) {
             creditScoreChange = _interest;
         } else if(_interest <= 100) {
@@ -237,7 +239,17 @@ contract TestUsers {
         
         if(creditScoreChange > 250) {
             creditScoreChange = 250;
-        }
+        }*/
         return(creditScoreChange);
+    }
+    
+    function lg(uint _num) public pure returns(uint) {
+        uint divideNum = _num;
+        uint counter = 0;
+        while(divideNum > 1) {
+           divideNum /= 2; 
+           counter++;
+        }
+        return counter;
     }
 }
