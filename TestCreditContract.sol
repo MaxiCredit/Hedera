@@ -16,7 +16,7 @@ contract TestUsersInterface {
     function checkUsersAddress(address _usersAddress) public view returns(bool);
     function getUsersAddress(uint _usersId, uint _counter) public view returns(address);
     function getUserByAddress(address _addr) public view returns(uint);
-    function increaseCreditScore(uint _borrowerId, uint _interestRate, uint _creditId) public;
+    function increaseCreditScore(uint _borrowerId, uint _interest, uint _interestRate, uint _creditId) public;
     function decreaseCreditScore(uint _borrowerId, uint _ratio, uint _creditId) public;
     function setCreditContractAddress(address _creditAddr, uint _userId, uint _loanId) public;
 }
@@ -27,11 +27,11 @@ contract MXOptionInterface {
 
 contract TestCreditContract {
     
-    address SimpleTokenAddress = 0x00;
+    address SimpleTokenAddress = 0x000000000000000000000000000000000002EFcd;
     address MXOptionAddress = 0x000000000000000000000000000000000002E6D3;
     SimpleTokenInterface sti = SimpleTokenInterface(SimpleTokenAddress);
     MXOptionInterface moi = MXOptionInterface(MXOptionAddress);
-    TestUsersInterface tui = TestUsersInterface(0x000000000000000000000000000000000002e6D1);
+    TestUsersInterface tui = TestUsersInterface(0x000000000000000000000000000000000002EFc9);
     
     uint public loanId;
     uint public lenderId;
@@ -46,6 +46,7 @@ contract TestCreditContract {
     uint public start;
     uint public lastReedem = 0;
     uint public toPayBack;
+    uint public totalPayBack;
     uint public a; //should rename periodLength
     uint public capital;
     uint public initialCapital;
@@ -66,6 +67,7 @@ contract TestCreditContract {
         toPayBack = _redeem;
         start = now;
         periods = _period;
+        totalPayBack = periods * toPayBack;
         length = _length;
         a = length / periods;
         for(uint i = 0; i <= _period; i++) {
@@ -114,7 +116,9 @@ contract TestCreditContract {
             toPayBack = capital * (100 + interestRate) / 100;
         }
         if(lastReedem == periods) {
-            tui.increaseCreditScore(borrowerId, interestRate + 2, loanId);
+            uint interest = totalPayBack - initialCapital;
+            uint annualisedRate = annumRate();
+            tui.increaseCreditScore(borrowerId, interest, annualisedRate, loanId);
         }
         latePeriodCounter = 0;
     }
@@ -168,16 +172,18 @@ contract TestCreditContract {
         interestRate -= _changeInterest;
         uint remainingPeriods = periods - lastReedem; 
         toPayBack = calcRedeem(capital, remainingPeriods, interestRate);
+        totalPayBack = toPayBack * periods;
     }
     
     function reStructure(uint _period) public onlyOwner {
         require(_period > periods);
         uint remainingPeriods = _period - lastReedem;
         toPayBack = calcRedeem(capital, remainingPeriods, interestRate);
+        totalPayBack = toPayBack * _period;
     }
     
     //Reusable, should move to library
-    
+    //When floating point number will be fully supported should change the following 2 function for more precise algorithm 
     function calcRedeem (uint _amount, uint _period, uint _rate) private pure returns(uint) { 
         uint pow = 1;
         uint onePerPow = 1000000000000;
@@ -196,6 +202,13 @@ contract TestCreditContract {
         uint oneMinus = 100000000 - onePerPow;
         uint currentRedeem = uint(_amount * _rate * 1000000 / oneMinus);
         return(currentRedeem);
+    }
+    
+    function annumRate() public view returns(uint){
+        uint secInYears = 365 * 86400 * 100; //handling decimals
+		uint loanLengthYearMultipliler = secInYears / length;
+		uint annualRate = interestRate * periods * loanLengthYearMultipliler / 100;
+		return annualRate;
     }
     
     function getBorrower(uint _id) public view returns(address) {
