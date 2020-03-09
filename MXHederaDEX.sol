@@ -69,6 +69,10 @@ contract MXHederaDEX {
         MXAddress = _addr;
     }
     
+    function getMXallowance(address _from, address _to) public view returns(uint) {
+        return mxi.allowance(_from, _to);
+    }
+    
     function setOrderHbarBid(uint _amount, uint _price, uint _lastTo) public payable {
         uint HbarBidPrice = _amount * _price;
         require(HbarBidPrice == msg.value); //take to setOrder
