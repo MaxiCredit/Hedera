@@ -97,7 +97,7 @@ contract TestUsers {
     
     function addOp(address _addr) public onlyOwner() {
         operators.push(_addr);
-        isOp[_addr] == true;
+        isOp[_addr] = true;
     }
     
     function registerUser(string memory _firstName,
