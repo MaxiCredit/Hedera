@@ -7,21 +7,26 @@ contract ERC20Interface {
     function transfer(address _to, uint _sum) public;
     function balanceOf(address _owner) public view returns(uint);
     function decimals() public view returns(uint8);
+    function checkPrice(uint _priceUSD, uint _priceHbar, uint _HbarUSDprice, uint _txAmount) public;
 }
 
 contract MXHederaDEX {
     
     event SetOrderHbarBid(uint indexed _orderId, uint _amount, uint _price, uint _lastTo);
     event SetOrderHbarAsk(uint indexed _orderId, uint _amount, uint _price, uint _lastTo);
-    event SetOrderERC20(OfferType indexed _orderType, uint indexed _orderId, uint _amount, uint _price, uint _lastTo, address _currencyAddress);
+    event SetOrderERC20(uint indexed _orderType, uint indexed _orderId, uint _amount, uint _price, uint _lastTo, address _currencyAddress);
     event DeleteOrder(uint indexed _orderId);
     event AcceptHbarBid(uint indexed _orderId, uint _amount);
     event AcceptHbarAsk(uint indexed _orderId, uint _amount);
     event AcceptERC20Bid();
     event AcceptERC20Ask();
     
-    enum OfferType {Bid, Ask}
-    enum CurrencyType {Hbar, ERC20}
+    //enum OfferType {Bid, Ask}
+    //enum CurrencyType {Hbar, ERC20}
+    uint Bid = 0;
+    uint Ask = 1;
+    uint Hbar = 0;
+    uint ERC20 = 1;
     
     using AddressUtils for address;
     address public owner;
@@ -31,8 +36,8 @@ contract MXHederaDEX {
     ERC20Interface mxi = ERC20Interface(MXAddress);
 
     struct Order {
-        OfferType orderType;
-        CurrencyType orderCurrencyType;
+        uint orderType;
+        uint orderCurrencyType;
         uint orderAmount;
         uint orderPrice;
         uint orderLastTo;
@@ -67,7 +72,7 @@ contract MXHederaDEX {
     function setOrderHbarBid(uint _amount, uint _price, uint _lastTo) public payable {
         uint HbarBidPrice = _amount * _price;
         require(HbarBidPrice == msg.value); //take to setOrder
-        orderId = orders.push(Order(OfferType.Bid, CurrencyType.Hbar, _amount, _price, now + _lastTo, address(0), msg.sender, HbarBidPrice)); 
+        orderId = orders.push(Order(Bid, Hbar, _amount, _price, now + _lastTo, address(0), msg.sender, HbarBidPrice)); 
         ordersByAddress[msg.sender][orderNumberByAddress[msg.sender]] = orderId;
         orderNumberByAddress[msg.sender] ++;
         orderCounter++;
@@ -76,21 +81,21 @@ contract MXHederaDEX {
 
     function setOrderHbarAsk(uint _amount, uint _price, uint _lastTo) public {
         require(mxi.allowance(msg.sender, address(this)) >= _amount); //take to setOrder
-        orderId = orders.push(Order(OfferType.Ask, CurrencyType.Hbar, _amount, _price, now + _lastTo, address(0), msg.sender, 0)); 
+        orderId = orders.push(Order(Ask, Hbar, _amount, _price, now + _lastTo, address(0), msg.sender, 0)); 
         ordersByAddress[msg.sender][orderNumberByAddress[msg.sender]] = orderId;
         orderNumberByAddress[msg.sender] ++;
         orderCounter++;
         emit SetOrderHbarAsk(orderId, _amount, _price, _lastTo);
     }
     
-    function setOrderERC20(OfferType _orderType, uint _amount, uint _price, uint _lastTo, address _currencyAddress) public {
-        if(_orderType == OfferType.Bid) {
+    function setOrderERC20(uint _orderType, uint _amount, uint _price, uint _lastTo, address _currencyAddress) public {
+        if(_orderType == 0) {
             require(ERC20Interface(_currencyAddress).allowance(msg.sender, address(this)) >= _amount);
         }
-        if(_orderType == OfferType.Ask) {
+        if(_orderType == 1) {
             require(mxi.allowance(msg.sender, address(this)) >= _amount);
         }
-        orderId = orders.push(Order(_orderType, CurrencyType.ERC20, _amount, _price, now + _lastTo, _currencyAddress, msg.sender, 0)); 
+        orderId = orders.push(Order(_orderType, ERC20, _amount, _price, now + _lastTo, _currencyAddress, msg.sender, 0)); 
         ordersByAddress[msg.sender][orderNumberByAddress[msg.sender]] = orderId;
         orderNumberByAddress[msg.sender] ++;
         orderCounter++;
@@ -111,9 +116,9 @@ contract MXHederaDEX {
         emit DeleteOrder(_orderId);
     }
     
-    function acceptBidHbar(uint _orderId, uint _amount) public {
-        require(orders[_orderId].orderType == OfferType.Bid);
-        require(orders[_orderId].orderCurrencyType == CurrencyType.Hbar);
+    function acceptBidHbar(uint _orderId, uint _amount, uint _priceUSD, uint _HbarUSDprice) public {
+        require((orders[_orderId].orderType) == Bid);
+        require(orders[_orderId].orderCurrencyType == Hbar);
         require(orders[_orderId].orderAmount >= _amount);
         require(mxi.allowance(msg.sender, address(this)) >= _amount);
         uint bidHbarPrice = orders[_orderId].orderPrice * _amount;
@@ -122,11 +127,12 @@ contract MXHederaDEX {
         emit AcceptHbarBid(_orderId, _amount);
         orders[_orderId].orderAmount -= _amount;
         orders[_orderId].HbarBalance -= bidHbarPrice;
+        mxi.checkPrice(_priceUSD, orders[_orderId].orderPrice, _HbarUSDprice, _amount);
     }
     
-    function acceptAskHbar(uint _orderId, uint _amount) public payable {
-        require(orders[_orderId].orderType == OfferType.Ask);
-        require(orders[_orderId].orderCurrencyType == CurrencyType.Hbar);
+    function acceptAskHbar(uint _orderId, uint _amount, uint _priceUSD, uint _HbarUSDprice) public payable {
+        require(orders[_orderId].orderType == Ask);
+        require(orders[_orderId].orderCurrencyType == Hbar);
         require(orders[_orderId].orderAmount >= _amount);
         uint askHbarPrice = orders[_orderId].orderPrice * _amount;
         require(askHbarPrice == msg.value);
@@ -135,12 +141,13 @@ contract MXHederaDEX {
         mxi.transferFrom(orders[_orderId].orderOwner, msg.sender, _amount);
         emit AcceptHbarAsk(_orderId, _amount);
         orders[_orderId].orderAmount -= _amount;
+        mxi.checkPrice(_priceUSD, orders[_orderId].orderPrice, _HbarUSDprice, _amount);
     }
     
     function acceptBidERC20(uint _orderId, uint _amount) public {
         require(orders[_orderId].orderAmount >= _amount);
-        require(orders[_orderId].orderType == OfferType.Bid);
-        require(orders[_orderId].orderCurrencyType == CurrencyType.ERC20);
+        require(orders[_orderId].orderType == Bid);
+        require(orders[_orderId].orderCurrencyType == ERC20);
         require(mxi.allowance(msg.sender, address(this)) >= _amount);
         uint bidERC20Price = orders[_orderId].orderPrice * _amount;
         address currencyAddress = orders[_orderId].orderCurrencyAddress;
@@ -152,8 +159,8 @@ contract MXHederaDEX {
     
     function acceptAskERC20(uint _orderId, uint _amount) public {
         require(orders[_orderId].orderAmount >= _amount);
-        require(orders[_orderId].orderType == OfferType.Ask);
-        require(orders[_orderId].orderCurrencyType == CurrencyType.ERC20);
+        require(orders[_orderId].orderType == Ask);
+        require(orders[_orderId].orderCurrencyType == ERC20);
         address currencyAddress = orders[_orderId].orderCurrencyAddress;
         require(ERC20Interface(currencyAddress).allowance(msg.sender, address(this)) >= _amount);
         uint askERC20Price = orders[_orderId].orderPrice * _amount;
