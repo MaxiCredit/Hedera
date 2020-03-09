@@ -101,7 +101,7 @@ contract MXHedera {
     uint public toTransferCounter = 0;
     
     constructor (address _operator, uint _initSupply, string memory _name, string memory _symbol, uint _initPriceUSD, 
-        uint _initPriceHbar, address _spotMarket, address _deposit, address _futures, address _testUser) public {
+        uint _initPriceHbar) public {
         operatorOfContract = _operator;        
         balanceOf[this] = _initSupply;
         initSupply = _initSupply;
@@ -111,10 +111,6 @@ contract MXHedera {
         decimals = 0;
         serverAddressArrayLength = serverAddress.push(_operator);
         isOurServer[_operator] = true;
-        spotMarketAddress = _spotMarket;
-        depositAddress = _deposit;
-        futuresContractAddress = _futures;
-        testUserAddress = _testUser;
         priceUSD = _initPriceUSD;
         priceHbar = _initPriceHbar; //Input in tinybar
         HbarUSDprice = priceUSD * 100000000 / priceHbar;
@@ -124,6 +120,26 @@ contract MXHedera {
         dailyLowerBound = priceUSD * 98 / 100;
     }
     
+    function setDexAddress(address  _spotMarket) public operator {
+        require(_spotMarket != address(0));
+        spotMarketAddress = _spotMarket;
+    }
+    
+    function setDepositAddress(address  _deposit) public operator {
+        require(_deposit != address(0));
+        depositAddress = _deposit;
+    }
+    
+    function setOptionAddress(address  _futures) public operator {
+        require(_futures != address(0));
+        futuresContractAddress = _futures;
+    }
+    
+    function setUserRegAddress(address  _testUser) public operator {
+        require(_testUser != address(0));
+        testUserAddress = _testUser;
+    }
+            
     function totalSupply() public view returns(uint) {
         return(supply);
     }
