@@ -33,7 +33,7 @@ contract MXHederaDEX {
     mapping(address => mapping(uint => uint)) public ordersByAddress;
     mapping(address => uint) public orderNumberByAddress;
     address public MXAddress;
-    ERC20Interface mxi = ERC20Interface(MXAddress);
+    ERC20Interface mxi;
 
     struct Order {
         uint orderType;
@@ -67,10 +67,13 @@ contract MXHederaDEX {
     function setMXAddress(address _addr) public onlyOwner {
         require(_addr != address(0));
         MXAddress = _addr;
+        mxi = ERC20Interface(_addr);
     }
     
     function getMXallowance(address _from, address _to) public view returns(uint) {
-        return mxi.allowance(_from, _to);
+        //return mxi.allowance(_from, _to);
+        uint allow = mxi.allowance(_from, _to);
+        return allow;
     }
     
     function setOrderHbarBid(uint _amount, uint _price, uint _lastTo) public payable {
