@@ -80,6 +80,7 @@ contract MXHedera {
     uint public dailyBasePrice; // 0.01 USD cent
     uint public dailyUpperBound;
     uint public dailyLowerBound;
+    TestUserInterface tui;
 
     modifier onlyServer() {
         require(isOurServer[msg.sender] == true);
@@ -138,6 +139,7 @@ contract MXHedera {
     function setUserRegAddress(address  _testUser) public operator {
         require(_testUser != address(0));
         testUserAddress = _testUser;
+        tui = TestUserInterface(_testUser); 
     }
             
     function totalSupply() public view returns(uint) {
@@ -422,7 +424,6 @@ contract MXHedera {
         _transfer(address(this), _addr, _amount);
     }
     
-    TestUserInterface tui = TestUserInterface(testUserAddress); 
     function approveToAllAddress(uint _sum, address _spender) public {
         uint addressCount = tui.getUserAddressCount(msg.sender); //should create this function
         uint user = tui.getUserByAddress(msg.sender);
