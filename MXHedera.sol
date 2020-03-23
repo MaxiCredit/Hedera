@@ -42,10 +42,18 @@ contract MXHedera {
     uint decimals;
     mapping(address => uint) public balanceOf;
     mapping(address => uint) public orderByAddress;
-    mapping(uint => address) public orderById;
-    mapping(uint => bool) public orderPaid;
-    uint[] public orderAmountById;
-    uint orderId = 0;
+    struct OuterOrder {
+       address orderAddress;
+       bool orderPaid;
+       uint orderAmount;
+       uint orderPrice;
+    }
+    
+    //mapping(uint => address) public orderById;
+    //mapping(uint => bool) public orderPaid;
+    //uint[] public orderAmountById;
+    OuterOrder[] public outerOrders;
+    uint public orderId = 0;
     
     mapping(address => uint) public saleOffersByAddress;
     mapping(uint => address) public saleOffersById;
@@ -235,34 +243,22 @@ contract MXHedera {
     //For using other currencies like BTC, fiat...
     function createOuterOrder(uint _amount) public {
         require(_amount > 0);
-        orderAmountById.push(_amount);
+        outerOrders.push(OuterOrder(msg.sender, false, _amount, priceUSD));
         orderByAddress[msg.sender] = orderId;
-        orderById[orderId] = msg.sender;
         emit OuterOrderCreated(msg.sender, orderId, _amount);
         orderId ++;
     }
-        /*
-    function setOuterOrderPaid(uint _orderId, uint _paidAmount) public onlyServer {
-        uint orderSum = orderAmountById[_orderId] * priceUSD;
-        require(orderSum == _paidAmount);
-        orderPaid[_orderId] = true;
-        address buyerAddress = orderById[_orderId];
-        emit OrderPaid(buyerAddress, _orderId);
-    }
-    
-    function outerTransfer(uint _orderId) public {
-        require(orderPaid[_orderId] == true);
-        _transfer(address(this), orderById[_orderId], orderAmountById[_orderId]);
-    }
-        */
 
-    function outerTransfer(uint _orderId, uint _paidAmount) public onlyServer {
-        uint orderSum = orderAmountById[_orderId] * priceUSD;
+
+    function outerTransfer(uint _orderId, uint _paidAmount, address _payer) public onlyServer {
+        uint orderSum = outerOrders[_orderId].orderAmount * outerOrders[_orderId].orderPrice;
         require(orderSum == _paidAmount);
-        orderPaid[_orderId] = true;
-        address buyerAddress = orderById[_orderId];
+        require(outerOrders[_orderId].orderAddress == _payer);
+        require(outerOrders[_orderId].orderPaid == false);
+        outerOrders[_orderId].orderPaid = true;
+        address buyerAddress = _payer;
         emit OrderPaid(buyerAddress, _orderId);
-        _transfer(address(this), orderById[_orderId], orderAmountById[_orderId]);
+        _transfer(address(this), _payer, outerOrders[_orderId].orderAmount);
     }
     
 
