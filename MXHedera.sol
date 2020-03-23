@@ -1,7 +1,7 @@
 pragma solidity >=0.4.25;
 import "./AddressUtils.sol";
 
-//Last updated by Zol, 2020.03.03
+//Last updated by Zol, 2020.03.23
 contract ERC20Interface {
     function allowance(address _from, address _to) public view returns(uint);
     function transferFrom(address _from, address _to, uint _sum) public;
@@ -31,7 +31,9 @@ contract MXHedera {
     event SetToSale(address indexed _seller, uint indexed _offerId, uint _amount, uint _unitPrice);
     event ApproveTransfer(address indexed _seller, address indexed _buyer, uint _amount);
     event TxApproval(address indexed _from, address indexed _to, uint _sum, uint _id);
-    
+    event ConvertToHederaMX(address indexed _buyer, uint indexed _amount);
+    event ConvertFromHederaMX(address indexed _seller, uint indexed _amount);
+
     using AddressUtils for address;
     uint public initSupply;
     address public spotMarketAddress;
@@ -249,7 +251,6 @@ contract MXHedera {
         orderId ++;
     }
 
-
     function outerTransfer(uint _orderId, uint _paidAmount, address _payer) public onlyServer {
         uint orderSum = outerOrders[_orderId].orderAmount * outerOrders[_orderId].orderPrice;
         require(orderSum == _paidAmount);
@@ -261,7 +262,16 @@ contract MXHedera {
         _transfer(address(this), _payer, outerOrders[_orderId].orderAmount);
     }
     
-
+    //Convert between blockchains
+    function concertToHederaMX(address _buyer, uint _amount) public onlyServer {
+       _transfer(address(this), _buyer, _amount); 
+       emit ConvertToHederaMX(_buyer, _amount);
+    }
+    
+    function convertFromHederaMX(uint _amount) public {
+       _transfer(msg.sender, address(this), _amount);
+       emit ConvertFromHederaMX(msg.sender, _amount);
+    }
     
     //----------
     
