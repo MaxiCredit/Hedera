@@ -30,6 +30,7 @@ contract TestUsers {
         uint creditScore;
         uint addressesCounter;
         uint creditContractCounter;
+        uint lastScoreFromAccount;
     }   
     
     User[] users;
@@ -106,7 +107,7 @@ contract TestUsers {
         string memory _mothersFirstName,
         //string _mothersLastName,
         uint _idDocumentNumber,
-        uint _personalID,
+        uint _personalID, //May be should add by operators, derived from credentials
         string memory _country,
         string memory _city,
         string memory _residentalAddress,
@@ -124,7 +125,7 @@ contract TestUsers {
             //isSpec[userCounter][operators[0] = true change to random operators, when there are more ops
             isSpec[userCounter][testCreditAddress] = true; //??
             isSpec[userCounter][msg.sender] = true;
-            users.push(User(_firstName, userCounter, _birthDate, getAge(_birthDate), _mothersFirstName, _idDocumentNumber, _personalID, _country, _city, _residentalAddress, _emailAddress, _phoneNumber, 0, 1, 0));
+            users.push(User(_firstName, userCounter, _birthDate, getAge(_birthDate), _mothersFirstName, _idDocumentNumber, _personalID, _country, _city, _residentalAddress, _emailAddress, _phoneNumber, 0, 1, 0, 0));
             emit NewUserAdded(_firstName, userCounter, msg.sender, _personalID);
             userCounter ++;
     }
@@ -207,6 +208,12 @@ contract TestUsers {
     function increaseCreditScore(uint _borrowerId, uint _interest, uint _interestRate, uint _creditId) public onlyCreditContract(_creditId) {
         uint plus = calculateScoreIncrease(_interest, _interestRate);
         users[_borrowerId].creditScore += plus; 
+    }
+    
+    function modifyCreditScoreByAccountHistory(uint _borrowerId, uint _currentScoreFromAccount) public onlyOps {
+        users[_borrowerId].creditScore -= users[_borrowerId].lastScoreFromAccount;
+        users[_borrowerId].creditScore += _currentScoreFromAccount; 
+        users[_borrowerId].lastScoreFromAccount = _currentScoreFromAccount;
     }
     
     function decreaseCreditScore(uint _borrowerId, uint _ratio, uint _creditId) public onlyCreditContract(_creditId) {
