@@ -211,9 +211,15 @@ contract TestUsers {
     }
     
     function modifyCreditScoreByAccountHistory(uint _borrowerId, uint _currentScoreFromAccount) public onlyOps {
+        uint currentScoreFromAccount;
+        if(_currentScoreFromAccount > 150) {
+            currentScoreFromAccount = 150;
+        } else {
+            currentScoreFromAccount = _currentScoreFromAccount;
+        }
         users[_borrowerId].creditScore -= users[_borrowerId].lastScoreFromAccount;
-        users[_borrowerId].creditScore += _currentScoreFromAccount; 
-        users[_borrowerId].lastScoreFromAccount = _currentScoreFromAccount;
+        users[_borrowerId].creditScore += currentScoreFromAccount; 
+        users[_borrowerId].lastScoreFromAccount = currentScoreFromAccount;
     }
     
     function decreaseCreditScore(uint _borrowerId, uint _ratio, uint _creditId) public onlyCreditContract(_creditId) {
