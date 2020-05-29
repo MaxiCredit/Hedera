@@ -1,7 +1,7 @@
 pragma solidity >=0.4.25;
 import "./AddressUtils.sol";
 
-//Last updated by Zol, 2020.03.23
+//Last updated by Zol, 2020.05.21
 contract ERC20Interface {
     function allowance(address _from, address _to) public view returns(uint);
     function transferFrom(address _from, address _to, uint _sum) public;
@@ -9,12 +9,6 @@ contract ERC20Interface {
     function balanceOf(address _owner) public view returns(uint);
 }
 
-/*
-interface MXOptions {
-    function mint(uint _amount) external; 
-    function setOption(uint _amount, uint _lastTo) external;
-}
-*/
 contract TestUserInterface {
     function getUserAddressCount(address _addr) public view returns(uint);
     function getUserByAddress(address _addr) public view returns(uint);
@@ -24,45 +18,16 @@ contract TestUserInterface {
 contract MXHedera {
     
     event Transfer(address indexed _from, address indexed _to, uint _sum);
-    event OuterOrderCreated(address indexed _buyer, uint indexed _orderId, uint _amount);
-    event OrderPaid(address indexed _buyer, uint indexed _orderId);
-    event TokenBought(address indexed _buyer, uint _sum);
-    event TokenBoughtFromSeller(address indexed _buyer, address _seller, uint _amount, uint indexed _offerId);
-    event SetToSale(address indexed _seller, uint indexed _offerId, uint _amount, uint _unitPrice);
     event ApproveTransfer(address indexed _seller, address indexed _buyer, uint _amount);
-    event TxApproval(address indexed _from, address indexed _to, uint _sum, uint _id);
-    event ConvertToHederaMX(address indexed _buyer, uint indexed _amount);
-    event ConvertFromHederaMX(address indexed _seller, uint indexed _amount);
 
     using AddressUtils for address;
-    uint public initSupply;
+
     address public spotMarketAddress;
     address public depositAddress;
     address public futuresContractAddress; //Rename optionContarctAddress
     address public testUserAddress;
     uint supply;
-    uint decimals;
-    mapping(address => uint) public balanceOf;
-    mapping(address => uint) public orderByAddress;
-    struct OuterOrder {
-       address orderAddress;
-       bool orderPaid;
-       uint orderAmount;
-       uint orderPrice;
-    }
-    
-    //mapping(uint => address) public orderById;
-    //mapping(uint => bool) public orderPaid;
-    //uint[] public orderAmountById;
-    OuterOrder[] public outerOrders;
-    uint public orderId = 0;
-    
-    mapping(address => uint) public saleOffersByAddress;
-    mapping(uint => address) public saleOffersById;
-    uint public saleOffersCounter = 0;
-    mapping(uint => uint) public saleOffersAmount;
-    mapping(uint => uint) public saleOffersUnitPrice;
-    
+
     mapping(uint => uint) buyBackOfferByPrice;
     struct BuyBackOffer {
         uint price;
@@ -73,10 +38,11 @@ contract MXHedera {
     uint public hbarsToBuyBack = 0;
     
     mapping(address => mapping(address => uint)) public approvedTransfers;
-    
+    mapping(address => uint) public balanceOf;
+    uint public initSupply;
+    uint public decimals;
     string public name;
     string public symbol;
-    //address public contractOwner;
     address public operatorOfContract;
     
     address[] public serverAddress;
@@ -101,20 +67,11 @@ contract MXHedera {
         require(msg.sender == operatorOfContract);
         _;
     }
-    
-   struct ToTransfer {
-       address tokenFrom;
-       address tokenTo;
-       uint tokenAmount;
-    }
-    
-    ToTransfer[] toTransfers;
-    uint public toTransferCounter = 0;
-    
+
     constructor (address _operator, uint _initSupply, string memory _name, string memory _symbol, uint _initPriceUSD, 
         uint _initPriceHbar) public {
         operatorOfContract = _operator;        
-        balanceOf[this] = _initSupply;
+        balanceOf[address(this)] = _initSupply;
         initSupply = _initSupply;
         supply = initSupply;
         symbol = _symbol;
@@ -134,6 +91,7 @@ contract MXHedera {
     function setDexAddress(address  _spotMarket) public operator {
         require(_spotMarket != address(0));
         spotMarketAddress = _spotMarket;
+        setServerAddress(_spotMarket);
     }
     
     function setDepositAddress(address  _deposit) public operator {
@@ -156,6 +114,14 @@ contract MXHedera {
         return(supply);
     }
     
+    function getTokenBalance(address _owner) public view returns(uint) {
+        return(balanceOf[_owner]);
+    }
+    
+    function getPrices() public view returns(uint, uint, uint) {
+        return(priceUSD, priceHbar, dailyBasePrice);
+    }
+    
     function mintByTx(uint _txAmount) private {
         //Don't add to contract's balance, but half of them to deposit, half of them to spot market
         uint supplyIncreaseHalf = uint(_txAmount / 100);
@@ -167,27 +133,17 @@ contract MXHedera {
     
     function mintAtUpperBound(uint _txAmount) private {
         supply += _txAmount;
-        balanceOf[this] += _txAmount;
-        setToSale(_txAmount, dailyUpperBound);
-    }
+        balanceOf[address(this)] += _txAmount;
+        //balanceOf[spotMarketAddress] += _txAmount;
+    }    
     
-    /*
-    MXOptions futureCon = MXOptions(futuresContractAddress); //Rename optionCon
-    function issueOptionByCredit(uint _interestRate, uint _lastTo) private {
-        if(_interestRate > 2) {
-            uint optionIncrease = _interestRate;
-            futureCon.mint(optionIncrease); 
-            futureCon.setOption(optionIncrease, _lastTo);
-        }
-    }
-    */
+
     //MXoptions and MXfutures can be changed to MX from futuresAddress's balance
     //address public futuresAddress; should define in constructor
     function mintByRedeem(uint _loanAmount, uint _interestRate) private {
         if(_interestRate > 2) {
             uint supplyIncrease = uint((_loanAmount * (_interestRate - 2)) / 100);
             supply += supplyIncrease;
-            //balanceOf[this] += supplyIncrease;  
             balanceOf[address(futuresContractAddress)] += supplyIncrease;
         }
     }
@@ -200,7 +156,8 @@ contract MXHedera {
     
     function withdrawHbar(address _to, uint _amount) public operator {
         require(_to != address(0));
-        _to.transfer(_amount);
+        address payable to = address(uint160(_to));
+        to.transfer(_amount);
     }
     
     function setServerAddress(address _serverAddress) public operator {
@@ -242,101 +199,13 @@ contract MXHedera {
         mintByRedeem(_sum, _interestRate); 
     }
 
-    //For using other currencies like BTC, fiat...
-    function createOuterOrder(uint _amount) public {
-        require(_amount > 0);
-        outerOrders.push(OuterOrder(msg.sender, false, _amount, priceUSD));
-        orderByAddress[msg.sender] = orderId;
-        emit OuterOrderCreated(msg.sender, orderId, _amount);
-        orderId ++;
-    }
 
-    function outerTransfer(uint _orderId, uint _paidAmount, address _payer) public onlyServer {
-        uint orderSum = outerOrders[_orderId].orderAmount * outerOrders[_orderId].orderPrice;
-        require(orderSum == _paidAmount);
-        require(outerOrders[_orderId].orderAddress == _payer);
-        require(outerOrders[_orderId].orderPaid == false);
-        outerOrders[_orderId].orderPaid = true;
-        address buyerAddress = _payer;
-        emit OrderPaid(buyerAddress, _orderId);
-        _transfer(address(this), _payer, outerOrders[_orderId].orderAmount);
+    function getHbar(uint _amount) public payable {
+        require(_amount > 0);
+        require(msg.value == _amount);
+        address payable to = address(uint160(address(this)));
+        to.transfer(_amount);
     }
-    
-    //Convert between blockchains
-    function concertToHederaMX(address _buyer, uint _amount) public onlyServer {
-       _transfer(address(this), _buyer, _amount); 
-       emit ConvertToHederaMX(_buyer, _amount);
-    }
-    
-    function convertFromHederaMX(uint _amount) public {
-       _transfer(msg.sender, address(this), _amount);
-       emit ConvertFromHederaMX(msg.sender, _amount);
-    }
-    
-    //----------
-    
-    function buyToken(uint _sum) public payable {
-        uint price = _sum * priceHbar;
-        require(msg.value == price);
-        _transfer(address(this), msg.sender, _sum);
-        emit TokenBought(msg.sender, _sum);
-    }
-    
-    function getTokenBalance(address _owner) public view returns(uint) {
-        return(balanceOf[_owner]);
-    }
-    
-    function setToSale(uint _amount, uint _unitPrice) public {
-        require(balanceOf[msg.sender] >= _amount);
-        require(_unitPrice > 0);
-        saleOffersByAddress[msg.sender] = saleOffersCounter;
-        saleOffersById[saleOffersCounter] = msg.sender;
-        saleOffersAmount[saleOffersCounter] = _amount;
-        saleOffersUnitPrice[saleOffersCounter] = _unitPrice; //price in tinybar
-        emit SetToSale(msg.sender, saleOffersCounter, _amount, _unitPrice);
-        saleOffersCounter ++;
-    }
-    
-    function buyFromSeller(uint _amount, uint _offerId) public payable {
-        require(saleOffersAmount[_offerId] >= _amount);
-        uint orderPrice = _amount * saleOffersUnitPrice[_offerId];
-        require(msg.value == orderPrice);
-        saleOffersAmount[_offerId] -= _amount;
-        _transfer(saleOffersById[_offerId], msg.sender, _amount);
-        uint sellersShare = orderPrice * 99 / 100;
-        uint toSend = sellersShare;
-        sellersShare = 0;
-        address to = saleOffersById[_offerId];
-        to.transfer(toSend);
-        priceHbar = saleOffersUnitPrice[_offerId];
-        priceUSD = priceHbar / HbarUSDprice;
-        emit TokenBoughtFromSeller(msg.sender, saleOffersById[_offerId], _amount, _offerId);
-        if(priceUSD >= dailyUpperBound) {
-            mintAtUpperBound(_amount);
-        }
-    }
-    
-    function approveTx(address _to, uint _sum) public {
-        toTransfers.push(ToTransfer(msg.sender, _to, _sum));
-        emit TxApproval(msg.sender, _to, _sum, toTransferCounter);
-        toTransferCounter ++;
-    }
-    
-    function getApprovedTx(uint _id) public view returns(address, address, uint) {
-        return(toTransfers[_id].tokenFrom, toTransfers[_id].tokenTo, toTransfers[_id].tokenAmount);
-    }
-    
-    function transferById(uint _transferId) public {
-        _transfer(toTransfers[_transferId].tokenFrom, toTransfers[_transferId].tokenTo, toTransfers[_transferId].tokenAmount);
-        toTransfers[_transferId].tokenAmount = 0;
-    }
-    
-    function transferByIdPartly(uint _transferId, uint _amount) public {
-        require(toTransfers[_transferId].tokenAmount >= _amount);
-        _transfer(toTransfers[_transferId].tokenFrom, toTransfers[_transferId].tokenTo, _amount);
-        toTransfers[_transferId].tokenAmount -= _amount;
-    }
-    
     
     function approve(address _spender, uint _sum) public {
         approvedTransfers[msg.sender][_spender] += _sum;
@@ -361,14 +230,7 @@ contract MXHedera {
         _transfer(_from, _to, _sum);
         mintByRedeem(_sum, _interestRate); 
     }
-    
-    //_priceHbar in tinybar, _priceUSD and _HbarUSDprice in 0.01 USD cent
-    function setPrice(uint _priceUSD, uint _priceHbar, uint _HbarUSDprice) public onlyServer {
-       priceUSD = _priceUSD;
-       priceHbar = _priceHbar; 
-       HbarUSDprice = _HbarUSDprice;
-    }
-    
+
     //DailyBasePrice is calculated in USD
     function setDailyBasePrice(uint _price) public onlyServer() {
         require(now > lastDailyLimitUpdate + 86400);
@@ -415,14 +277,12 @@ contract MXHedera {
     
     function buyBack(uint _txAmount, uint _buyBackOfferId) public {
         require(_txAmount <= buyBackOffers[_buyBackOfferId].amount);
-        //require(allowance(msg.sender, address(this)) >= _txAmount);
-        //transferFrom(msg.sender, address(this), _txAmount);
         uint hbarsToSend = _txAmount * buyBackOffers[_buyBackOfferId].price * 100000000 / HbarUSDprice;
         require(hbarsToSend <= hbarsToBuyBack);
         _transfer(msg.sender, address(this), _txAmount);
         buyBackOffers[_buyBackOfferId].amount -= _txAmount;
         hbarsToBuyBack -= hbarsToSend;
-        address to = msg.sender;
+        address payable to = address(msg.sender);
         to.transfer(hbarsToSend);
     }
     
